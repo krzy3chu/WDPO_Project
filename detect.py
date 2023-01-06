@@ -27,85 +27,90 @@ def detect(img_path: str) -> Dict[str, int]:
     Dict[str, int]
         Dictionary with quantity of each object.
     """
+
+    # read image
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
 
-    cv2.namedWindow("image", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("image", 700, 700)
-    cv2.imshow("image", img)
+    # constant threshold values
+    thresholds = {
+        "red":      [50, 175, 180],
+        "yellow":   [210, 20, 27],
+        "green":    [160, 33, 57],
+        "purple":   [50, 150, 172]
+    }
+    color = "red"
 
-    cv2.namedWindow("image hsv", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("image hsv", 700, 700)
-    cv2.createTrackbar("s_l", "image hsv", 194, 256, empty_callback)  # saturation lower threshold
-    cv2.createTrackbar("h_l", "image hsv", 30, 180, empty_callback)  # hue lower threshold
-    cv2.createTrackbar("h_h", "image hsv", 55, 180, empty_callback)  # hue higher threshold
-    cv2.createTrackbar("ope", "image hsv", 4, 10, empty_callback)  # open morphology iterations
-    cv2.createTrackbar("clo", "image hsv", 1, 10, empty_callback)  # close morphology iterations
+    # create windows and trackbars
+    win_hsv_name = "filtering by hsv representation"
+    cv2.namedWindow(win_hsv_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(win_hsv_name, 700, 700)
+    cv2.createTrackbar("s_l", win_hsv_name, thresholds[color][0], 256, empty_callback)  # saturation lower threshold
+    cv2.createTrackbar("h_l", win_hsv_name, thresholds[color][1], 180, empty_callback)  # hue lower threshold
+    cv2.createTrackbar("h_h", win_hsv_name, thresholds[color][2], 180, empty_callback)  # hue higher threshold
 
-    cv2.namedWindow("image watershed", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("image watershed", 700, 700)
-    cv2.createTrackbar("ero", "image watershed", 2, 10, empty_callback)  # sure fg erode morphology iterations
-    cv2.createTrackbar("dil", "image watershed", 2, 10, empty_callback)  # sure bg dilate morphology iterations
+    win_morph_name = "mask processing using morphology operations"
+    cv2.namedWindow(win_morph_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(win_morph_name, 700, 700)
+    cv2.createTrackbar("ope", win_morph_name, 6, 10, empty_callback)      # open morphology iterations
+    cv2.createTrackbar("clo", win_morph_name, 4, 10, empty_callback)      # close morphology iterations
+    cv2.createTrackbar("ero", win_morph_name, 3, 10, empty_callback)      # foreground erode morphology iterations
+
+    win_water_name = "define boundaries with watershed algorithm"
+    cv2.namedWindow(win_water_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(win_water_name, 700, 700)
+    cv2.createTrackbar("dil", win_water_name, 6, 10, empty_callback)      # background dilate morphology iterations
 
     while True:
         key_code = cv2.waitKey(100)
         if key_code == 27:  # escape key pressed
             break
 
-        # get trackbar values
-        s_l = cv2.getTrackbarPos("s_l", "image hsv")
-        h_l = cv2.getTrackbarPos("h_l", "image hsv")
-        h_h = cv2.getTrackbarPos("h_h", "image hsv")
-        clo = cv2.getTrackbarPos("clo", "image hsv")
-        ope = cv2.getTrackbarPos("ope", "image hsv")
+        # get trackbars values
+        s_l = cv2.getTrackbarPos("s_l", win_hsv_name)
+        h_l = cv2.getTrackbarPos("h_l", win_hsv_name)
+        h_h = cv2.getTrackbarPos("h_h", win_hsv_name)
+        clo = cv2.getTrackbarPos("clo", win_morph_name)
+        ope = cv2.getTrackbarPos("ope", win_morph_name)
+        ero = cv2.getTrackbarPos("ero", win_morph_name)
+        dil = cv2.getTrackbarPos("dil", win_water_name)
 
-        # create mask based on thresholds values
+        # create mask based on color thresholds values
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         hsv_low = np.array([h_l, s_l, 0])
         hsv_high = np.array([h_h, 256, 256])
-        hsv_mask = cv2.inRange(img_hsv, hsv_low, hsv_high)
-        morph_kernel = np.ones((3, 3))
-        mask_ope = cv2.morphologyEx(hsv_mask, cv2.MORPH_OPEN, morph_kernel, iterations=ope)
-        mask_clo = cv2.morphologyEx(mask_ope, cv2.MORPH_CLOSE, morph_kernel, iterations=clo)
+        mask_hsv = cv2.inRange(img_hsv, hsv_low, hsv_high)
 
-        # set all saturation and value to maximum
+        # set all saturation and value to maximum, convert back to BGR and crop image using mask
         img_hsv[:, :, 1:3] = 255
-
-        # convert back to BGR and crop image using mask
         img_sat = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR)
-        img_masked = cv2.bitwise_and(img_sat, img_sat, mask=mask_clo)
-        cv2.imshow("image hsv", img_masked)
+        img_masked = cv2.bitwise_and(img_sat, img_sat, mask=mask_hsv)
+        cv2.imshow(win_hsv_name, img_masked)
 
-        # watershed tutorial
-        # kernel = np.ones((3, 3), np.uint8)
-        # sure_bg = cv2.dilate(hsv_mask_clo, kernel, iterations=3)
-        # dist_transform = cv2.distanceTransform(hsv_mask, cv2.DIST_L1, 5, dstType=cv2.CV_8U)
-        # ret, sure_fg = cv2.threshold(dist_transform, 0.7 * dist_transform.max(), 255, 0)
-        # sure_fg = np.uint8(sure_fg)
-        # unknown = cv2.subtract(sure_bg, sure_fg)
-        # ret, markers = cv2.connectedComponents(sure_fg)
-        # markers = markers + 1
-        # markers[unknown == 255] = 0
-        # img_water = img.copy()
-        # markers = cv2.watershed(img_water, markers)
-        # img_water[markers == -1] = [255, 0, 0]
-        # cv2.imshow("image watershed", img_water)
-        # print(ret-1)
+        # process mask with morphology operations
+        morph_kernel = np.array([[0, 1, 1, 1, 0],
+                                 [1, 1, 1, 1, 1],
+                                 [1, 1, 1, 1, 1],
+                                 [1, 1, 1, 1, 1],
+                                 [0, 1, 1, 1, 0]], dtype=np.ubyte)
+        mask_morph = cv2.morphologyEx(mask_hsv, cv2.MORPH_OPEN, morph_kernel, iterations=ope)
+        mask_morph = cv2.morphologyEx(mask_morph, cv2.MORPH_CLOSE, morph_kernel, iterations=clo)
+        mask_morph = cv2.morphologyEx(mask_morph, cv2.MORPH_ERODE, morph_kernel, iterations=ero)
 
-        # get trackbar values
-        ero = cv2.getTrackbarPos("ero", "image watershed")
-        dil = cv2.getTrackbarPos("dil", "image watershed")
+        # obtain number of skittles, crop image using new mask and show result
+        num, markers = cv2.connectedComponents(mask_morph)
+        img_masked = cv2.bitwise_and(img, img, mask=mask_morph)
+        cv2.putText(img_masked, "Number of skittles: " + str(num-1), (5, img_masked.shape[0]-5), cv2.FONT_HERSHEY_PLAIN, 12, (255, 255, 255), 8)
+        cv2.imshow(win_morph_name, img_masked)
 
-        sure_fg = cv2.morphologyEx(mask_clo, cv2.MORPH_ERODE, morph_kernel, iterations=ero)
-        sure_bg = cv2.morphologyEx(mask_clo, cv2.MORPH_DILATE, morph_kernel, iterations=dil)
-        unknown = cv2.subtract(sure_bg, sure_fg)
-        num, markers = cv2.connectedComponents(sure_fg)
-        print(num - 1)
+        # draw borders using watershed algorithm
+        mask_bg = cv2.morphologyEx(mask_morph, cv2.MORPH_DILATE, morph_kernel, iterations=dil)
+        mask_border = cv2.subtract(mask_bg, mask_morph)
         markers = markers + 1
-        markers[unknown == 255] = 0
+        markers[mask_border == 255] = 0
         img_water = img.copy()
         markers = cv2.watershed(img_water, markers)
         img_water[markers == -1] = [0, 0, 0]
-        cv2.imshow("image watershed", img_water)
+        cv2.imshow(win_water_name, img_water)
 
     red = 1
     yellow = 2

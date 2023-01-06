@@ -11,7 +11,7 @@ URL = 'https://wdpo.dpieczynski.pl'
 
 
 def main():
-    student_id = 000000  # Tutaj należy wpisać swój numer indeksu
+    student_id = 147402  # Tutaj należy wpisać swój numer indeksu
 
     data = BytesIO()
     with ZipFile(data, 'w', ZIP_DEFLATED) as zip_file:

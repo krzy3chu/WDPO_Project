@@ -32,31 +32,32 @@ def detect(img_path: str) -> Dict[str, int]:
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
 
     # constant threshold values
-    # thresholds = {
-    #     "red":      [50, 175, 180],
-    #     "yellow":   [210, 20, 27],
-    #     "green":    [60, 25, 60],
-    #     "purple":   [50, 150, 172]
-    # }
-    # color = "green"
+    thrs = {
+        "red":      [145, 166, 173, 50, 160, 175],  # ex: 17
+        "yellow":   [140, 10, 17, 50, 6, 20],
+        "green":    [85, 23, 50, 50, 20, 55],
+        "purple":   [30, 136, 167, 20, 130, 170]  # ex: 32, mean_h=163
+    }
+    color = "green"
 
     # create windows and trackbars
     win_sure_fg = "filtering to find area that is foreground for sure"
     cv2.namedWindow(win_sure_fg, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win_sure_fg, 700, 700)
-    cv2.createTrackbar("s_l", win_sure_fg, 120, 256, empty_callback)      # fg saturation lower threshold
-    cv2.createTrackbar("h_l", win_sure_fg, 11, 180, empty_callback)      # fg hue lower threshold
-    cv2.createTrackbar("h_h", win_sure_fg, 17, 180, empty_callback)    # fg hue higher threshold
-    cv2.createTrackbar("ope", win_sure_fg, 5, 10, empty_callback)       # fg open morphology iterations
+    cv2.createTrackbar("s_l", win_sure_fg, thrs[color][0], 256, empty_callback)    # fg saturation lower threshold
+    cv2.createTrackbar("h_l", win_sure_fg, thrs[color][1], 180, empty_callback)     # fg hue lower threshold
+    cv2.createTrackbar("h_h", win_sure_fg, thrs[color][2], 180, empty_callback)     # fg hue higher threshold
+    cv2.createTrackbar("ope", win_sure_fg, 6, 10, empty_callback)       # fg open morphology iterations
     cv2.createTrackbar("ero", win_sure_fg, 3, 10, empty_callback)       # fg erode morphology iterations
+    cv2.createTrackbar("are", win_sure_fg, 90, 100, empty_callback)      # fg area size lower threshold
     cv2.createTrackbar("col", win_sure_fg, 0, 1, empty_callback)        # fg choose between color space representation
 
     win_sure_bg = "filtering to find area that is background for sure"
     cv2.namedWindow(win_sure_bg, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win_sure_bg, 700, 700)
-    cv2.createTrackbar("s_l", win_sure_bg, 75, 256, empty_callback)      # bg saturation lower threshold
-    cv2.createTrackbar("h_l", win_sure_bg, 9, 180, empty_callback)      # bg hue lower threshold
-    cv2.createTrackbar("h_h", win_sure_bg, 20, 180, empty_callback)    # bg hue higher threshold
+    cv2.createTrackbar("s_l", win_sure_bg, thrs[color][3], 256, empty_callback)      # bg saturation lower threshold
+    cv2.createTrackbar("h_l", win_sure_bg, thrs[color][4], 180, empty_callback)      # bg hue lower threshold
+    cv2.createTrackbar("h_h", win_sure_bg, thrs[color][5], 180, empty_callback)    # bg hue higher threshold
     cv2.createTrackbar("clo", win_sure_bg, 5, 10, empty_callback)       # bg close morphology iterations
     cv2.createTrackbar("dil", win_sure_bg, 3, 10, empty_callback)       # bg dilate morphology iterations
     cv2.createTrackbar("col", win_sure_bg, 0, 1, empty_callback)        # bg choose between color space representation
@@ -64,6 +65,8 @@ def detect(img_path: str) -> Dict[str, int]:
     win_water = "define boundaries with watershed algorithm"
     cv2.namedWindow(win_water, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win_water, 700, 700)
+    cv2.createTrackbar("m_l", win_water, 144, 180, empty_callback)  # mean color lower threshold
+    cv2.createTrackbar("m_h", win_water, 163, 180, empty_callback)  # mean color higher threshold
 
     hue_offset = 10  # hue offset, used to move red color to higher values only
 
@@ -84,6 +87,7 @@ def detect(img_path: str) -> Dict[str, int]:
         fg_h_h = cv2.getTrackbarPos("h_h", win_sure_fg) + hue_offset
         fg_ope = cv2.getTrackbarPos("ope", win_sure_fg)
         fg_ero = cv2.getTrackbarPos("ero", win_sure_fg)
+        fg_are = cv2.getTrackbarPos("are", win_sure_fg) * 10
         fg_col = cv2.getTrackbarPos("col", win_sure_fg)
 
         bg_s_l = cv2.getTrackbarPos("s_l", win_sure_bg)
@@ -92,6 +96,9 @@ def detect(img_path: str) -> Dict[str, int]:
         bg_clo = cv2.getTrackbarPos("clo", win_sure_bg)
         bg_dil = cv2.getTrackbarPos("dil", win_sure_bg)
         bg_col = cv2.getTrackbarPos("col", win_sure_bg)
+
+        m_l = cv2.getTrackbarPos("m_l", win_water) + hue_offset
+        m_h = cv2.getTrackbarPos("m_h", win_water) + hue_offset
 
         # convert image to hsv space, set hue values lower than hue_offset to hue_value+180
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -103,6 +110,14 @@ def detect(img_path: str) -> Dict[str, int]:
         mask_fg = cv2.inRange(img_hsv, fg_hsv_low, fg_hsv_high)
         mask_fg = cv2.morphologyEx(mask_fg, cv2.MORPH_OPEN, morph_kernel, iterations=fg_ope)
         mask_fg = cv2.morphologyEx(mask_fg, cv2.MORPH_ERODE, morph_kernel, iterations=fg_ero)
+
+        # find connected area, filter small ones
+        num, markers = cv2.connectedComponents(mask_fg)
+        if num < 50:    # skip that part when testing thresholds
+            for mark in range(1, num):
+                area = np.sum(markers == mark)
+                if area < fg_are and area != 0:
+                    mask_fg[markers == mark] = 0
 
         # choose viewed image color space representation, crop image using mask
         if fg_col:
@@ -136,12 +151,21 @@ def detect(img_path: str) -> Dict[str, int]:
         # draw borders using watershed algorithm
         num, markers = cv2.connectedComponents(mask_fg)
         mask_border = cv2.subtract(mask_bg, mask_fg)
-        markers = markers + 1
+        markers += 1
         markers[mask_border == 255] = 0
         img_water = img.copy()
         markers = cv2.watershed(img_water, markers)
         img_water[markers == -1] = [0, 0, 0]
-        cv2.putText(img_water, "Number of skittles: " + str(num-1), (5, img_water.shape[0]-5), cv2.FONT_HERSHEY_PLAIN, 12, (255, 255, 255), 8)
+        markers -= 1
+        num = np.max(markers)
+        if num < 50:    # skip that part when testing thresholds
+            for mark in range(1, num+1):
+                obj = markers == mark
+                mean = np.sum(img_hsv[:, :, 0][obj]) / np.sum(obj)
+                if not m_l < mean < m_h:
+                    num -= 1
+                    print(mean)
+        cv2.putText(img_water, "Number of skittles: " + str(num), (5, img_water.shape[0] - 5), cv2.FONT_HERSHEY_PLAIN, 12, (255, 255, 255), 8)
         cv2.imshow(win_water, img_water)
 
     red = 1

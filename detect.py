@@ -27,6 +27,8 @@ wt_dst = 0.7    # watershed distance transform threshold
 
 # ----------------------- define Color class, create list of its instances ----------------------- #
 class Color:
+    name = ""
+
     fg_s_l = 0      # foreground saturation lower threshold
     fg_h_l = 0      # foreground hue lower threshold
     fg_h_h = 255    # foreground hue higher threshold
@@ -35,7 +37,8 @@ class Color:
     bg_h_h = 255    # background hue higher threshold
     bgr_col = [0, 0, 0]     # color representation in bgr space
 
-    def __init__(self, fg_s_l, fg_h_l, fg_h_h, bg_s_l, bg_h_l, bg_h_h, bgr_col):
+    def __init__(self, name, fg_s_l, fg_h_l, fg_h_h, bg_s_l, bg_h_l, bg_h_h, bgr_col):
+        self.name   = name
         self.fg_s_l = fg_s_l
         self.fg_h_l = fg_h_l + hue_offset
         self.fg_h_h = fg_h_h + hue_offset
@@ -46,10 +49,10 @@ class Color:
 
     cnt = 0         # counter, stores number of skittles detected on current image
 
-yellow = Color(180, 12 , 16 , 50, 6  , 20 , [0, 1, 1])
-green  = Color(120, 25 , 50 , 50, 17 , 55 , [0, 1, 0])
-purple = Color(35 , 150, 160, 15, 80 , 174, [1, 0, 1])
-red    = Color(160, 167, 173, 50, 160, 175, [0, 0, 1])
+yellow = Color("yellow", 180, 12 , 16 , 50, 6  , 20 , [0, 1, 1])
+green  = Color("green" , 120, 25 , 50 , 50, 17 , 55 , [0, 1, 0])
+purple = Color("purple", 35 , 150, 160, 15, 80 , 174, [1, 0, 1])
+red    = Color("red"   , 160, 167, 173, 50, 160, 175, [0, 0, 1])
 colors = [yellow, green, purple, red]
 
 
@@ -123,13 +126,14 @@ def detect(img_path: str) -> Dict[str, int]:
         img[markers == -2] = [0, 0, 0]
         img[markers_th == 255] = color.bgr_col
 
-        # cv2.putText(img_water, "Number of skittles: " + str(num), (5, img_water.shape[0] - 5), cv2.FONT_HERSHEY_PLAIN, 12, (255, 255, 255), 8)
-
-    # # show results
+    # show results
     cv2.namedWindow("result", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("result", 900, 900)
+    for i in range(0, len(colors)):
+        cv2.putText(img, colors[i].name + ": " + str(colors[i].cnt), (5, (img.shape[0] - 20) - (3-i) * 200),
+                    cv2.FONT_HERSHEY_PLAIN, 12, colors[i].bgr_col, 12)
     cv2.imshow("result", img)
-    cv2.waitKey(1)
+    cv2.waitKey(0)
 
     return {'red': colors[3].cnt, 'yellow': colors[0].cnt, 'green': colors[1].cnt, 'purple': colors[2].cnt}
 

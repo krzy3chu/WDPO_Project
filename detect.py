@@ -20,9 +20,9 @@ morph_kernel = np.array([[0, 1, 1, 1, 0],   # kernel used in morphology operatio
 
 fg_v_l = 40     # foreground value lower threshold
 fg_clo = 1      # foreground close morphology iterations
-fg_are = 1000   # foreground area size lower threshold
-bg_clo = 7      # background close morphology iterations
-bg_dil = 3      # background dilate morphology iterations
+fg_are = 280    # foreground area size lower threshold
+bg_clo = 4      # background close morphology iterations
+bg_dil = 2      # background dilate morphology iterations
 wt_dst = 0.7    # watershed distance transform threshold
 
 # ----------------------- define Color class, create list of its instances ----------------------- #
@@ -50,7 +50,7 @@ class Color:
     cnt = 0         # counter, stores number of skittles detected on current image
 
 yellow = Color("yellow", 180, 12 , 16 , 50, 6  , 20 , [0, 1, 1])
-green  = Color("green" , 120, 25 , 50 , 50, 17 , 55 , [0, 1, 0])
+green  = Color("green" , 120, 23 , 50 , 50, 17 , 55 , [0, 1, 0])
 purple = Color("purple", 35 , 150, 160, 15, 80 , 174, [1, 0, 1])
 red    = Color("red"   , 160, 167, 173, 50, 160, 175, [0, 0, 1])
 colors = [yellow, green, purple, red]
@@ -72,7 +72,8 @@ def detect(img_path: str) -> Dict[str, int]:
 
     # read image, convert it to hsv space, set hue values lower than hue_offset to hue_value+180
     img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-    img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    img_res = cv2.resize(img, None, fx=0.5, fy=0.5)
+    img_hsv = cv2.cvtColor(img_res, cv2.COLOR_BGR2HSV)
     img_hsv[:, :, 0] += ((img_hsv[:, :, 0] < hue_offset) * 180).astype(np.ubyte)
 
     for color in colors:
@@ -104,7 +105,7 @@ def detect(img_path: str) -> Dict[str, int]:
         num_fg, markers = cv2.connectedComponents(mask_fg)
         markers += 1
         markers[mask_diff == 255] = 0
-        markers = cv2.watershed(img, markers)
+        markers = cv2.watershed(img_res, markers)
         markers -= 1
         # in markers now: -2 - borders, -1 - difference, 0 - background, 1,2,3... - next areas
 
@@ -123,19 +124,19 @@ def detect(img_path: str) -> Dict[str, int]:
         color.cnt = num - 1
 
         # draw borders and selected areas on image
-        img[markers == -2] = [0, 0, 0]
-        img[markers_th == 255] = color.bgr_col
+        img_res[markers == -2] = [0, 0, 0]
+        img_res[markers_th == 255] = color.bgr_col
 
     # show results
     cv2.namedWindow("result", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("result", 900, 900)
+    cv2.resizeWindow("result", 1200, 800)
     for i in range(0, len(colors)):
-        cv2.putText(img, colors[i].name + ": " + str(colors[i].cnt), (5, (img.shape[0] - 20) - (3-i) * 200),
-                    cv2.FONT_HERSHEY_PLAIN, 12, colors[i].bgr_col, 12)
-    cv2.imshow("result", img)
+        cv2.putText(img_res, colors[i].name + ": " + str(colors[i].cnt), (5, (img_res.shape[0] - 20) - (3-i) * 100),
+                    cv2.FONT_HERSHEY_PLAIN, 6, colors[i].bgr_col, 6)
+    cv2.imshow("result", img_res)
     cv2.waitKey(0)
 
-    return {'red': colors[3].cnt, 'yellow': colors[0].cnt, 'green': colors[1].cnt, 'purple': colors[2].cnt}
+    return {'yellow': colors[0].cnt, 'green': colors[1].cnt, 'purple': colors[2].cnt, 'red': colors[3].cnt}
 
 
 @click.command()

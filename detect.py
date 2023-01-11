@@ -7,7 +7,7 @@ import cv2
 from tqdm import tqdm
 
 import numpy as np
-
+from my_check import my_check
 
 # ----------------------- define color class, create list of its instances ----------------------- #
 hue_offset = 10  # hue offset, used to move red color to higher values only
@@ -125,11 +125,11 @@ def detect(img_path: str) -> Dict[str, int]:
 
         # cv2.putText(img_water, "Number of skittles: " + str(num), (5, img_water.shape[0] - 5), cv2.FONT_HERSHEY_PLAIN, 12, (255, 255, 255), 8)
 
-    # show results
+    # # show results
     cv2.namedWindow("result", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("result", 900, 900)
     cv2.imshow("result", img)
-    cv2.waitKey(0)
+    cv2.waitKey(1)
 
     return {'red': colors[3].cnt, 'yellow': colors[0].cnt, 'green': colors[1].cnt, 'purple': colors[2].cnt}
 
@@ -151,6 +151,7 @@ def main(data_path: Path, output_file_path: Path):
     with open(output_file_path, 'w') as ofp:
         json.dump(results, ofp)
 
+    my_check()
 
 if __name__ == '__main__':
     main()

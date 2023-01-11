@@ -22,7 +22,6 @@ def detect(img_path: str) -> Dict[str, int]:
         Path to processed image.
 
     Returns
-
     -------
     Dict[str, int]
         Dictionary with quantity of each object.
@@ -33,10 +32,10 @@ def detect(img_path: str) -> Dict[str, int]:
 
     # constant threshold values
     thrs = {
-        "red":      [160, 167, 173, 50, 160, 175],  # ex: 17 2w1
-        "yellow":   [160, 10, 17, 50, 6, 20],       # ex: 39 2w1, !: 31 too_big_area!
-        "green":    [85, 24, 50, 50, 18, 55],       # ex: 36 2w1
-        "purple":   [32, 136, 162, 20, 130, 170]    # ex: 32, are=90
+        "red":      [160, 167, 173, 50, 160, 175],
+        "yellow":   [180, 12, 16, 50, 6, 20],
+        "green":    [120, 25, 50, 50, 17, 55],
+        "purple":   [35, 150, 160, 15, 80, 174]
     }
     color = "green"
 
@@ -44,12 +43,12 @@ def detect(img_path: str) -> Dict[str, int]:
     win_sure_fg = "filtering to find area that is foreground for sure"
     cv2.namedWindow(win_sure_fg, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win_sure_fg, 700, 700)
-
     cv2.createTrackbar("s_l", win_sure_fg, thrs[color][0], 256, empty_callback)    # fg saturation lower threshold
     cv2.createTrackbar("h_l", win_sure_fg, thrs[color][1], 180, empty_callback)     # fg hue lower threshold
     cv2.createTrackbar("h_h", win_sure_fg, thrs[color][2], 180, empty_callback)     # fg hue higher threshold
-    cv2.createTrackbar("ero", win_sure_fg, 2, 10, empty_callback)       # fg erode morphology iterations
-    cv2.createTrackbar("are", win_sure_fg, 90, 150, empty_callback)      # fg area size lower threshold
+    cv2.createTrackbar("v_l", win_sure_fg, 40, 256, empty_callback)     # fg hue higher threshold
+    cv2.createTrackbar("clo", win_sure_fg, 1, 10, empty_callback)       # fg close morphology iterations
+    cv2.createTrackbar("are", win_sure_fg, 100, 150, empty_callback)      # fg area size lower threshold
     cv2.createTrackbar("col", win_sure_fg, 0, 1, empty_callback)        # fg choose between color space representation
 
     win_sure_bg = "filtering to find area that is background for sure"
@@ -58,15 +57,14 @@ def detect(img_path: str) -> Dict[str, int]:
     cv2.createTrackbar("s_l", win_sure_bg, thrs[color][3], 256, empty_callback)      # bg saturation lower threshold
     cv2.createTrackbar("h_l", win_sure_bg, thrs[color][4], 180, empty_callback)      # bg hue lower threshold
     cv2.createTrackbar("h_h", win_sure_bg, thrs[color][5], 180, empty_callback)    # bg hue higher threshold
-    cv2.createTrackbar("clo", win_sure_bg, 5, 10, empty_callback)       # bg close morphology iterations
+    cv2.createTrackbar("clo", win_sure_bg, 7, 10, empty_callback)       # bg close morphology iterations
     cv2.createTrackbar("dil", win_sure_bg, 3, 10, empty_callback)       # bg dilate morphology iterations
     cv2.createTrackbar("col", win_sure_bg, 0, 1, empty_callback)        # bg choose between color space representation
 
     win_water = "define boundaries with watershed algorithm"
     cv2.namedWindow(win_water, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(win_water, 900, 900)
-    cv2.createTrackbar("m_l", win_water, thrs[color][1], 180, empty_callback)  # mean color lower threshold
-    cv2.createTrackbar("m_h", win_water, thrs[color][2], 180, empty_callback)  # mean color higher threshold
+    cv2.createTrackbar("dst", win_water, 70, 100, empty_callback)  # distance transform threshold
 
     hue_offset = 10  # hue offset, used to move red color to higher values only
 
@@ -85,7 +83,8 @@ def detect(img_path: str) -> Dict[str, int]:
         fg_s_l = cv2.getTrackbarPos("s_l", win_sure_fg)
         fg_h_l = cv2.getTrackbarPos("h_l", win_sure_fg) + hue_offset
         fg_h_h = cv2.getTrackbarPos("h_h", win_sure_fg) + hue_offset
-        fg_ero = cv2.getTrackbarPos("ero", win_sure_fg)
+        fg_v_l = cv2.getTrackbarPos("v_l", win_sure_fg)
+        fg_clo = cv2.getTrackbarPos("clo", win_sure_fg)
         fg_are = cv2.getTrackbarPos("are", win_sure_fg) * 10
         fg_col = cv2.getTrackbarPos("col", win_sure_fg)
 
@@ -96,38 +95,34 @@ def detect(img_path: str) -> Dict[str, int]:
         bg_dil = cv2.getTrackbarPos("dil", win_sure_bg)
         bg_col = cv2.getTrackbarPos("col", win_sure_bg)
 
-        m_l = cv2.getTrackbarPos("m_l", win_water) + hue_offset
-        m_h = cv2.getTrackbarPos("m_h", win_water) + hue_offset
+        wt_dst = cv2.getTrackbarPos("dst", win_water) / 100
 
         # convert image to hsv space, set hue values lower than hue_offset to hue_value+180
         img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         img_hsv[:, :, 0] += ((img_hsv[:, :, 0] < hue_offset) * 180).astype(np.ubyte)
 
-        # create sure foreground mask based on color thresholds values and morphology operations
-        fg_hsv_low = np.array([fg_h_l, fg_s_l, 0])
+        # create sure foreground mask based on color thresholds values and morphology operation
+        fg_hsv_low = np.array([fg_h_l, fg_s_l, fg_v_l])
         fg_hsv_high = np.array([fg_h_h, 256, 256])
         mask_fg = cv2.inRange(img_hsv, fg_hsv_low, fg_hsv_high)
-        mask_fg = cv2.morphologyEx(mask_fg, cv2.MORPH_ERODE, morph_kernel, iterations=fg_ero)
+        mask_fg = cv2.morphologyEx(mask_fg, cv2.MORPH_CLOSE, morph_kernel, iterations=fg_clo)
 
-        # find connected area, filter small ones
-        num, markers = cv2.connectedComponents(mask_fg)
-        for mark in range(1, num):
-            area = np.sum(markers == mark)
-            if area < fg_are and area != 0:
-                mask_fg[markers == mark] = 0
+        # find connected areas, remove if smaller than area threshold
+        num_fg, markers = cv2.connectedComponents(mask_fg)
+        for n in range(1, num_fg):
+            area = np.sum(markers == n)
+            if area < fg_are:
+                mask_fg[markers == n] = 0
 
-        # choose viewed image color space representation, crop image using mask
+        # choose viewed foreground image color space representation, crop image using mask
         if fg_col:
-            img_hsv[:, :, 1:3] = 255
-            img_sat = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR)
-            img_masked = cv2.bitwise_and(img_sat, img_sat, mask=mask_fg)
+            img_hsv_sat = img_hsv.copy()
+            img_hsv_sat[:, :, 1:3] = 255
+            img_sat = cv2.cvtColor(img_hsv_sat, cv2.COLOR_HSV2BGR)
+            img_masked_fg = cv2.bitwise_and(img_sat, img_sat, mask=mask_fg)
         else:
-            img_masked = cv2.bitwise_and(img, img, mask=mask_fg)
-        cv2.imshow(win_sure_fg, img_masked)
-
-        # convert image to hsv space, set hue values lower than hue_offset to hue_value+180
-        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        img_hsv[:, :, 0] += ((img_hsv[:, :, 0] < hue_offset) * 180).astype(np.ubyte)
+            img_masked_fg = cv2.bitwise_and(img, img, mask=mask_fg)
+        cv2.imshow(win_sure_fg, img_masked_fg)
 
         # create sure background mask based on color thresholds values and morphology operations
         bg_hsv_low = np.array([bg_h_l, bg_s_l, 0])
@@ -136,30 +131,39 @@ def detect(img_path: str) -> Dict[str, int]:
         mask_bg = cv2.morphologyEx(mask_bg, cv2.MORPH_CLOSE, morph_kernel, iterations=bg_clo)
         mask_bg = cv2.morphologyEx(mask_bg, cv2.MORPH_DILATE, morph_kernel, iterations=bg_dil)
 
-        # choose viewed image color space representation, crop image using mask
+        # choose viewed background image color space representation, crop image using mask
         if bg_col:
-            img_hsv[:, :, 1:3] = 255
-            img_sat = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR)
-            img_masked = cv2.bitwise_and(img_sat, img_sat, mask=mask_bg)
+            img_hsv_sat = img_hsv.copy()
+            img_hsv_sat[:, :, 1:3] = 255
+            img_sat = cv2.cvtColor(img_hsv_sat, cv2.COLOR_HSV2BGR)
+            img_masked_bg = cv2.bitwise_and(img_sat, img_sat, mask=mask_bg)
         else:
-            img_masked = cv2.bitwise_and(img, img, mask=mask_bg)
-        cv2.imshow(win_sure_bg, img_masked)
+            img_masked_bg = cv2.bitwise_and(img, img, mask=mask_bg)
+        cv2.imshow(win_sure_bg, img_masked_bg)
 
-        # draw borders using watershed algorithm
-        num, markers = cv2.connectedComponents(mask_fg)
-        mask_border = cv2.subtract(mask_bg, mask_fg)
+        # set borders using watershed algorithm
+        mask_diff = cv2.subtract(mask_bg, mask_fg)
+        num_fg, markers = cv2.connectedComponents(mask_fg)
         markers += 1
-        markers[mask_border == 255] = 0
+        markers[mask_diff == 255] = 0
         img_water = img.copy()
         markers = cv2.watershed(img_water, markers)
         img_water[markers == -1] = [0, 0, 0]
         markers -= 1
-        num = np.max(markers)
-        for mark in range(1, num+1):
-            obj = markers == mark
-            mean = np.sum(img_hsv[:, :, 0][obj]) / np.sum(obj)
-            if not m_l < mean < m_h:
-                num -= 1
+
+        # calculate distance transform on each marker, then apply threshold mask
+        markers_th = np.zeros_like(markers, dtype=np.ubyte)
+        for n in range(1, num_fg):
+            mark = np.zeros_like(markers, dtype=np.ubyte)
+            mark[markers == n] = 255
+            dist_trans = cv2.distanceTransform(mark, cv2.DIST_L2, 5)
+            ret, mark_th = cv2.threshold(dist_trans, wt_dst * dist_trans.max(), 255, 0)
+            markers_th += mark_th.astype(np.ubyte)
+        num, markers_unused = cv2.connectedComponents(markers_th)
+        num -= 1
+
+        # show results
+        img_water[markers_th == 255] = [0, 255, 0]
         cv2.putText(img_water, "Number of skittles: " + str(num), (5, img_water.shape[0] - 5), cv2.FONT_HERSHEY_PLAIN, 12, (255, 255, 255), 8)
         cv2.imshow(win_water, img_water)
 

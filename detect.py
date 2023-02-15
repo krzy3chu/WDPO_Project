@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 import numpy as np
 
-# ----------------------- define color class, create list of its instances ----------------------- #
+# ----------------------- define constant parameters shared to all colors ----------------------- #
 hue_offset = 10  # hue offset, used to move red color to higher values only
 
 morph_kernel = np.array([[0, 1, 1, 1, 0],   # kernel used in morphology operations
